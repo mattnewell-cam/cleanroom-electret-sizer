@@ -11,6 +11,7 @@ electret (square side × layers) that reaches the PF you ask for at 0.3 µm.
   23.6 L/s at 50 Pa. Both are editable.
 - Fan curves are measured: sealed-inlet pressure and bag-fill free flow for the vacuum on each heater setting,
   orifice tests for the pedestal fan, bag fills against pressure for the Levoit Core Mini.
+- Filter media: electret or H13 ePTFE membrane (120 Pa, 99.95% at 5.3 cm/s, data sheet; log PF ∝ v^−2/3 assumed at other speeds).
 - Electret per layer: Δp = 2.58·v Pa, log10 PF = 1.5863·v^−0.307 at 0.3 µm (v in cm/s), fitted to vacuum-bag
   electret measured at 4.9–5.9 cm/s. Outside that range it is extrapolated, and the page says so.
 - PF is the electret alone. It ignores leaks around the electret and air leaking into the room.
