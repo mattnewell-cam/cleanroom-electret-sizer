@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cleanroom Electret Sizer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: same family as the electret square calculator. Knobs on the left; the stack, the numbers and the P–Q chart on the right. */
+:root {
+  --bg: #f3f5f7; --surface: #ffffff; --ink: #14202b; --ink-2: #4a5866; --ink-3: #75828f; --line: #d8dee4;
+  --accent: #2a78d6; --fan: #c2410c; --leak: #4a5866; --sys: #2a78d6;
+  --sheet: #fbfcfd; --sheet-edge: #93a2b0;
+  --warn-bg: #fff2d1; --warn-ink: #6f4700; --warn-edge: #e2b13c;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151a; --surface: #172029; --ink: #e7ecf0; --ink-2: #b0bcc7; --ink-3: #85929e; --line: #2a3642;
+    --accent: #3987e5; --fan: #f08a4b; --leak: #b0bcc7; --sys: #5aa2f0; --sheet: #2a3745; --sheet-edge: #71859a;
+    --warn-bg: #3a2d0b; --warn-ink: #f1cb72; --warn-edge: #9b7419; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151a; --surface: #172029; --ink: #e7ecf0; --ink-2: #b0bcc7; --ink-3: #85929e; --line: #2a3642;
+  --accent: #3987e5; --fan: #f08a4b; --leak: #b0bcc7; --sys: #5aa2f0; --sheet: #2a3745; --sheet-edge: #71859a;
+  --warn-bg: #3a2d0b; --warn-ink: #f1cb72; --warn-edge: #9b7419; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.05; margin: 0; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--ink-3); font-size: 13.5px; max-width: 70ch; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.controls { display: grid; gap: 18px; }
+.field { display: grid; gap: 6px; }
+.field > label, .field > .lab { font-size: 12.5px; font-weight: 600; color: var(--ink-2); letter-spacing: 0.02em; display: flex; justify-content: space-between; gap: 8px; }
+.field > label .u, .field > .lab .u { font-family: var(--font-mono); font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 10px; align-items: center; }
+input[type="number"], select {
+  font: inherit; font-family: var(--font-mono); font-size: 14px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0;
+}
+select { font-family: var(--font-body); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.out { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-3); padding: 5px 9px; background: var(--bg); border-radius: 6px; }
+.out b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.hint { font-size: 12px; color: var(--ink-3); margin: 0; }
+.minor { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--line); }
+.minor .cap { margin-bottom: -6px; }
+.seg { display: grid; grid-template-columns: repeat(var(--n, 2), 1fr); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 6px; border: 0; background: var(--bg); color: var(--ink-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.answer { display: grid; gap: 18px; }
+.answer > * { min-width: 0; }
+.top { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; row-gap: 6px; align-items: baseline; }
+.top .total { align-self: end; justify-items: end; text-align: right; }
+.top .basis { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); }
+.top .cost { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
+.hero { display: flex; flex-wrap: wrap; gap: 8px 40px; align-items: flex-end; }
+.fig { display: grid; gap: 4px; }
+.fig .num { font-family: var(--font-display); font-weight: 700; font-size: clamp(46px, 7.5vw, 72px); line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.fig .num small { font-size: 0.4em; font-weight: 600; color: var(--ink-2); margin-left: 6px; letter-spacing: 0; }
+.cap { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.total { display: grid; gap: 2px; justify-items: end; text-align: right; }
+.total b { font-family: var(--font-mono); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
+.spec div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.spec dt { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.spec dt .nc, .cap .nc { text-transform: none; }
+.spec dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 15px; }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.flags:empty { display: none; }
+.flag { border: 1px solid var(--warn-edge); background: var(--warn-bg); color: var(--warn-ink); padding: 3px 10px; border-radius: 6px; font-size: 13px; }
+.twocol { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: center; }
+@media (max-width: 640px) { .twocol { grid-template-columns: minmax(0, 1fr); } }
+#stack, #pq { width: 100%; height: auto; display: block; }
+#stack text { font-family: var(--font-mono); font-size: 13px; fill: var(--ink-2); }
+#stack text.big { font-size: 15px; font-weight: 500; fill: var(--ink); }
+#pq text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); }
+#pq text.lbl { font-size: 11px; font-weight: 500; fill: var(--ink-2); }
+.note { margin: 0; font-size: 12.5px; color: var(--ink-3); max-width: 80ch; }
+.note b { color: var(--ink-2); font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Cleanroom electret sizer</h1>
+    <p class="sub">Pick what pressurises the room and the room pressure you want. It finds where the fan, the electret and the room's leaks balance, and the least electret that gets the PF you ask for at 0.3 µm.</p>
+  </header>
+
+  <div class="main">
+    <form class="panel controls" id="controls" autocomplete="off">
+      <div class="field">
+        <label for="src">Air mover</label>
+        <select id="src"></select>
+        <p class="hint" id="src-note"></p>
+      </div>
+      <div class="field">
+        <label for="rp">Room pressure wanted <span class="u">Pa</span></label>
+        <div class="row2"><input type="range" id="rpr" min="1" max="40" step="0.5" aria-label="Room pressure slider"><input type="number" id="rp" min="0.5" max="200" step="0.5"></div>
+        <div class="out"><span>Most this mover can reach (no filter)</span><b id="o-max"></b></div>
+      </div>
+      <div class="field">
+        <span class="lab">PF wanted at 0.3 µm</span>
+        <div class="seg" style="--n:3" role="group" aria-label="Target protection factor">
+          <button type="button" data-logs="2">100</button>
+          <button type="button" data-logs="3">1,000</button>
+          <button type="button" data-logs="4">10,000</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="own">Logs already from the mover's own filter <span class="u">log</span></label>
+        <input type="number" id="own" min="0" max="4" step="0.1">
+        <p class="hint">Measured: Hoover outlet filter about 2, Levoit about 1.6. Leave at 0 to make the electret do all of it.</p>
+      </div>
+
+      <div class="minor">
+        <span class="cap">Room leakage, Q = C·Δpⁿ</span>
+        <div class="field">
+          <label for="q50">Leak flow at 50 Pa <span class="u">L/s</span></label>
+          <input type="number" id="q50" min="1" max="500" step="0.1">
+        </div>
+        <div class="field">
+          <label for="nx">Flow exponent n</label>
+          <input type="number" id="nx" min="0.5" max="1" step="0.01">
+          <div class="out"><span>Leakage area at 4 Pa</span><b id="o-ela"></b></div>
+        </div>
+        <div class="field">
+          <label for="vm">Fastest face speed allowed <span class="u">cm/s</span></label>
+          <input type="number" id="vm" min="1" max="100" step="0.5">
+          <p class="hint">The electret was measured at 4.9–5.9 cm/s. Faster than that is extrapolated.</p>
+        </div>
+      </div>
+    </form>
+
+    <section class="panel answer" aria-live="polite">
+      <div class="top">
+        <div class="hero">
+          <div class="fig"><span class="cap">Square side</span><span class="num"><span id="h-side">—</span><small>cm</small></span></div>
+          <div class="fig"><span class="cap">Layers</span><span class="num" id="h-n">—</span></div>
+        </div>
+        <div class="fig total"><span class="cap">Electret</span><span class="num"><span id="t-area">—</span><small>m²</small></span></div>
+        <span class="basis" id="t-basis"></span>
+        <span class="cost" id="t-cost"></span>
+      </div>
+      <dl class="spec" id="spec"></dl>
+      <div class="flags" id="flags"></div>
+      <div class="twocol">
+        <svg id="stack" viewBox="0 0 480 300" role="img" aria-label="Stack of electret layers"></svg>
+        <svg id="pq" viewBox="0 0 420 280" role="img" aria-label="Pressure against flow: fan curve, room leakage and room plus electret"></svg>
+      </div>
+      <p class="note" id="note"></p>
+    </section>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- model
+// Electret, per layer: Arome Livii vacuum-bag electret, as in the electret square calculator.
+// Δp = R·v, log10 PF(0.3 µm) = D·v^−α, v in cm/s. Measured only at 4.9–5.9 cm/s.
+const M = { R: 2.58, D: 1.5863, a: 0.3070 };
+const MARGIN = 2;                  // cm lost to the seal on every side of every layer
+const GSM = 20, USD_PER_KG = 2;    // charged surgical-grade meltblown, bulk
+const MAX_N = 40, SIDE_MAX = 300;  // cm
+
+// Air movers: fan curves as [Q L/s, p Pa] points, piecewise linear, last segment extended to p = 0.
+// Hoover with a space heater in series: sealed-inlet pressure measured (4,750 Pa on 2, 2,050 Pa on 1);
+// free flow from 95 L bag fills through the blanket roll (7.2 s on 2 = 13.2 L/s, 11 s on 1 = 8.6 L/s; ratio 0.655
+// vs √(2050/4750) = 0.657 from the fan laws; outlet-bag particle decay gave 12.9 L/s on 2). No heater: flow from
+// the leak law at the 50 Pa measured, pressure scaled by the fan laws. Straight-line curves: the shape is not measured.
+const lin = (p0, qmax) => [[0, p0], [qmax, 0]];
+// Pedestal fan bench curve, setting 3 (orifice tests, 17 Nov). The rewired fan runs at RW × that speed:
+// pressure × RW², flow × RW. RW = √(24 / 35.2), from 24 Pa measured in the room at 8 and 16 L/s.
+const P3 = [[0, 36], [4.4, 36], [12, 35], [30.3, 34], [65, 31], [109.9, 28], [145.1, 20]];
+const RW = Math.sqrt(24 / 35.2);
+const SOURCES = [
+  { id: 'h1', name: 'Hoover, heater on 1 (274 W)', pts: lin(2050, 8.64),
+    note: 'Quite bearable for noise. Room reached 7 Pa with no filter. 8.6 L/s by bag fill.' },
+  { id: 'h2', name: 'Hoover, heater on 2 (390 W)', pts: lin(4750, 13.2),
+    note: 'Still loud. Room reached 16 Pa with no filter. 13.2 L/s by bag fill.' },
+  { id: 'h0', name: 'Hoover, no heater', pts: lin(15200, 23.6),
+    note: 'Room reached 50 Pa. Sealed-inlet pressure not measured; inferred from the fan laws.' },
+  { id: 'pt', name: 'Pedestal fan, rewired (switch bypassed)', pts: P3.map(([q, p]) => [q * RW, p * RW * RW]),
+    note: 'The fan used in the room tests, wired past its broken switch. Setting 3 bench curve scaled to 0.83× speed (fan laws) to match the room: 24 Pa at 8 L/s (Vacmaster filter on) and at 16 L/s (no filter).' },
+  { id: 'p3', name: 'Pedestal fan, setting 3 (bench curve)', pts: P3,
+    note: 'Bench curve from the orifice tests (17 Nov, discharge coefficient 0.8 assumed). No duct losses.' },
+  { id: 'p2', name: 'Pedestal fan, setting 2 (bench curve)', pts: [[0, 27], [27, 27], [59.6, 26], [103.8, 25], [137.7, 18]],
+    note: 'Bench curve from the orifice tests (17 Nov, discharge coefficient 0.8 assumed). No duct losses.' },
+  { id: 'p1', name: 'Pedestal fan, setting 1 (bench curve)', pts: [[0, 18], [88.1, 18], [121.4, 14]],
+    note: 'Bench curve from the orifice tests (17 Nov, discharge coefficient 0.8 assumed). No duct losses.' },
+  { id: 'lv', name: 'Levoit Core Mini, setting 3', pts: [[0, 111], [11.9, 40], [14.6, 14], [17.3, 0]],
+    note: 'Measured with its own filter in: 111 Pa closed, 40 Pa at 11.9 L/s, 14 Pa at 14.6, 17.3 L/s open. Needs its intake ducted from outside.' },
+];
+
+function fanP(pts, Q) {
+  if (Q <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (Q <= pts[i][0]) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    return y0 + (y1 - y0) * (Q - x0) / (x1 - x0);
+  }
+  const [x0, y0] = pts[pts.length - 2], [x1, y1] = pts[pts.length - 1];
+  const s = (y1 - y0) / (x1 - x0);
+  return s < 0 ? Math.max(0, y1 + s * (Q - x1)) : y1;
+}
+function fanQzero(pts) {   // flow at which the (extended) curve reaches 0 Pa
+  const [x0, y0] = pts[pts.length - 2], [x1, y1] = pts[pts.length - 1];
+  return y1 <= 0 ? x1 : x1 + y1 / ((y0 - y1) / (x1 - x0));
+}
+const leakDp = (Q, C, n) => Math.pow(Q / C, 1 / n);
+const leakQ = (dp, C, n) => C * Math.pow(dp, n);
+
+// Operating point: fan pressure = room pressure (leaks) + electret Δp. All terms monotonic, so bisect.
+function operate(src, C, n, layers, aEff) {
+  const filt = Q => layers > 0 ? layers * M.R * (Q * 1000 / aEff) : 0;
+  const f = Q => fanP(src.pts, Q) - leakDp(Q, C, n) - filt(Q);
+  let lo = 0, hi = fanQzero(src.pts);
+  if (f(hi) > 0) return null;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; }
+  const Q = lo;
+  return { Q, room: leakDp(Q, C, n), filt: filt(Q), fan: fanP(src.pts, Q) };
+}
+
+function check(src, C, n, L, vmax, layers, side) {
+  const aEff = (side - 2 * MARGIN) ** 2;
+  const op = operate(src, C, n, layers, aEff);
+  if (!op) return null;
+  const v = op.Q * 1000 / aEff;
+  const logs = layers * M.D * Math.pow(v, -M.a);
+  return { ...op, v, logs, layers, side, used: layers * side * side };
+}
+
+// For each layer count, the smallest square (0.5 cm steps) that meets room pressure, logs and face speed at the
+// operating point. Bigger squares lower the electret's resistance, so flow and room pressure rise and face speed falls:
+// every test gets easier as the square grows, so bisection works. Keep the layer count that uses least electret.
+function design(src, C, n, target, L, vmax) {
+  const ok = r => r && r.room >= target - 1e-9 && r.logs >= L - 1e-9 && r.v <= vmax + 1e-9;
+  let best = null;
+  for (let layers = 1; layers <= MAX_N; layers++) {
+    let lo = Math.ceil(2 * (2 * MARGIN + 0.5)), hi = 2 * SIDE_MAX;
+    if (!ok(check(src, C, n, L, vmax, layers, hi / 2))) continue;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (ok(check(src, C, n, L, vmax, layers, m / 2))) hi = m; else lo = m + 1; }
+    const r = check(src, C, n, L, vmax, layers, lo / 2);
+    if (!best || r.used < best.used - 1e-9) best = r;
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------- state & inputs
+const $ = id => document.getElementById(id);
+const S = { src: 'h1', roomDp: 5, logs: 3, own: 0, q50: 23.6, n: 0.51, vmax: 10 };
+
+function bind(rid, nid, key) {
+  const r = rid && $(rid), nn = $(nid);
+  nn.value = S[key]; if (r) r.value = S[key];
+  if (r) r.addEventListener('input', () => { nn.value = r.value; S[key] = +r.value; render(); });
+  nn.addEventListener('input', () => { const v = parseFloat(nn.value); if (v >= 0 && isFinite(v)) { S[key] = v; if (r) r.value = v; render(); } });
+}
+function seg(attr, key, parse = x => x) {
+  const bs = document.querySelectorAll(`[data-${attr}]`);
+  const sync = () => bs.forEach(b => b.setAttribute('aria-pressed', parse(b.dataset[attr]) === S[key]));
+  bs.forEach(b => b.addEventListener('click', () => { S[key] = parse(b.dataset[attr]); sync(); render(); }));
+  sync();
+}
+
+// ---------------------------------------------------------------- formatting
+const fcm = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
+const f1 = x => x >= 100 ? Math.round(x).toLocaleString('en-GB') : x >= 10 ? x.toFixed(1) : x.toFixed(2);
+const pa = x => `${x >= 10 ? Math.round(x) : x.toFixed(1)} Pa`;
+const ls = q => `${q.toFixed(1)} L/s`;
+const pfStr = L => Number(Math.pow(10, L).toPrecision(2)).toLocaleString('en-GB');
+const usd = x => '≈ $' + (x < 1 ? x.toPrecision(2) : x.toFixed(2));
+const el = (tag, attrs = {}, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+
+// ---------------------------------------------------------------- render
+function render() {
+  const src = SOURCES.find(s => s.id === S.src);
+  $('src-note').textContent = src.note;
+  const n = Math.min(1, Math.max(0.5, S.n));
+  const C = S.q50 / Math.pow(50, n);
+  const L = Math.max(0, S.logs - S.own);
+
+  const bare = operate(src, C, n, 0, 1);
+  $('o-max').textContent = bare ? `${pa(bare.room)} at ${ls(bare.Q)}` : '—';
+  $('o-ela').textContent = `${(leakQ(4, C, n) / 1000 / Math.sqrt(2 * 4 / 1.2) * 1e4).toFixed(0)} cm²`;
+
+  const flags = $('flags'); flags.replaceChildren();
+  const flag = txt => { const d = document.createElement('span'); d.className = 'flag'; d.textContent = txt; flags.append(d); };
+  const spec = $('spec'); spec.replaceChildren();
+  const blank = txt => {
+    for (const id of ['h-side', 'h-n', 't-area']) $(id).textContent = '—';
+    $('t-cost').textContent = ''; $('t-basis').textContent = '';
+    $('stack').replaceChildren();
+    flag(txt);
+    drawPQ(src, C, n, null);
+  };
+
+  if (L <= 0) { blank('The mover\'s own filter already meets the target'); return; }
+  if (!bare || bare.room < S.roomDp) { blank(`This mover can't hold ${pa(S.roomDp)} even with no filter: ${bare ? pa(bare.room) : '0 Pa'} at most`); return; }
+
+  const b = design(src, C, n, S.roomDp, L, S.vmax);
+  if (!b) { blank('No square up to 3 m meets this. Lower the room pressure or allow a faster face speed.'); return; }
+
+  $('h-side').textContent = fcm(b.side);
+  $('h-n').textContent = String(b.layers);
+  $('t-area').textContent = (b.used / 1e4).toFixed(2);
+  $('t-cost').textContent = `${Math.round(b.used / 1e4 * GSM)} g · ${usd(b.used / 1e4 * GSM / 1000 * USD_PER_KG)} at $${USD_PER_KG}/kg`;
+  $('t-basis').textContent = `Electret at ${GSM} gsm`;
+
+  const rows = [
+    ['Airflow', `${ls(b.Q)} · ${Math.round(b.Q * 3.6)} m³/h`],
+    ['Room pressure', pa(b.room)],
+    ['Electret Δp', pa(b.filt)],
+    ['Face speed', `${b.v.toFixed(1)} cm/s`],
+    ['PF at 0.3 µm', S.own > 0 ? `${pfStr(b.logs)} × ${pfStr(S.own)} = ${pfStr(b.logs + S.own)}` : pfStr(b.logs)],
+  ];
+  for (const [k, v] of rows) {
+    const d = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
+    const um = k.indexOf('µm');
+    if (um >= 0) dt.append(k.slice(0, um), Object.assign(document.createElement('span'), { className: 'nc', textContent: 'µm' }));
+    else dt.textContent = k;
+    dd.textContent = v; d.append(dt, dd); spec.append(d);
+  }
+  if (b.v > 5.9) flag(`Face speed ${b.v.toFixed(1)} cm/s is above the 5.9 cm/s the electret was measured at`);
+  if (b.v < 4.9) flag(`Face speed ${b.v.toFixed(1)} cm/s is below the 4.9 cm/s the electret was measured at`);
+  if (b.room > S.roomDp * 1.5 + 1) flag(`The mover pushes the room to ${pa(b.room)}, above the ${pa(S.roomDp)} asked for`);
+
+  drawStack(b);
+  drawPQ(src, C, n, b);
+}
+
+// ---------------------------------------------------------------- P–Q chart
+function drawPQ(src, C, n, b) {
+  const svg = $('pq'); svg.replaceChildren();
+  const W = 420, H = 280, ml = 42, mr = 14, mt = 14, mb = 34;
+  const bare = operate(src, C, n, 0, 1);
+  const qTop = Math.max(b ? b.Q : 0, bare ? bare.Q : 0, leakQ(S.roomDp, C, n)) * 1.35 || 10;
+  const yNeed = Math.max(S.roomDp * 2.5, bare ? bare.room * 1.4 : 0, b ? (b.room + b.filt) * 1.6 : 0, 10);
+  const yTop = Math.min(Math.max(fanP(src.pts, 0) * 1.08, 10), yNeed);
+  const niceStep = r => { const raw = r / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; };
+  const xs = niceStep(qTop), ys = niceStep(yTop);
+  const xMax = Math.ceil(qTop / xs) * xs, yMax = Math.ceil(yTop / ys) * ys;
+  const X = q => ml + (W - ml - mr) * q / xMax, Y = p => mt + (H - mt - mb) * (1 - Math.min(p, yMax * 1.02) / yMax);
+  const g = el('g');
+  for (let q = 0; q <= xMax + 1e-9; q += xs) {
+    g.append(el('line', { x1: X(q), x2: X(q), y1: Y(0), y2: Y(yMax), stroke: 'var(--line)' }));
+    g.append(el('text', { x: X(q), y: Y(0) + 15, 'text-anchor': 'middle' }, String(+q.toFixed(3))));
+  }
+  for (let p = 0; p <= yMax + 1e-9; p += ys) {
+    g.append(el('line', { x1: X(0), x2: X(xMax), y1: Y(p), y2: Y(p), stroke: 'var(--line)' }));
+    g.append(el('text', { x: X(0) - 6, y: Y(p) + 4, 'text-anchor': 'end' }, String(+p.toFixed(3))));
+  }
+  g.append(el('text', { x: X(xMax), y: H - 4, 'text-anchor': 'end' }, 'flow, L/s'));
+  g.append(el('text', { x: 4, y: mt - 2 }, 'Pa'));
+  const path = fn => { let d = ''; for (let i = 0; i <= 120; i++) { const q = xMax * i / 120, p = fn(q); if (!isFinite(p)) continue; d += (d ? 'L' : 'M') + X(q).toFixed(1) + ',' + Y(p).toFixed(1); } return d; };
+  const clip = el('clipPath', { id: 'plot' }); clip.append(el('rect', { x: X(0), y: Y(yMax), width: X(xMax) - X(0), height: Y(0) - Y(yMax) }));
+  svg.append(clip);
+  const curves = el('g', { 'clip-path': 'url(#plot)' });
+  curves.append(el('path', { d: path(q => fanP(src.pts, q)), fill: 'none', stroke: 'var(--fan)', 'stroke-width': 2.5 }));
+  curves.append(el('path', { d: path(q => leakDp(q, C, n)), fill: 'none', stroke: 'var(--leak)', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
+  if (b) {
+    const aEff = (b.side - 2 * MARGIN) ** 2;
+    curves.append(el('path', { d: path(q => leakDp(q, C, n) + b.layers * M.R * q * 1000 / aEff), fill: 'none', stroke: 'var(--sys)', 'stroke-width': 2.5 }));
+    curves.append(el('line', { x1: X(b.Q), x2: X(b.Q), y1: Y(b.room), y2: Y(b.room + b.filt), stroke: 'var(--sys)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
+    curves.append(el('circle', { cx: X(b.Q), cy: Y(b.room + b.filt), r: 4.5, fill: 'var(--surface)', stroke: 'var(--sys)', 'stroke-width': 2 }));
+    curves.append(el('circle', { cx: X(b.Q), cy: Y(b.room), r: 3.5, fill: 'var(--leak)' }));
+  }
+  curves.append(el('line', { x1: X(0), x2: X(xMax), y1: Y(S.roomDp), y2: Y(S.roomDp), stroke: 'var(--ink-3)', 'stroke-width': 1, 'stroke-dasharray': '1 3' }));
+  g.append(curves);
+  // legend
+  const lg = [['var(--fan)', 'fan', ''], ['var(--leak)', 'room leaks', '5 4'], ['var(--sys)', 'leaks + electret', '']];
+  lg.forEach(([c, t, dash], i) => {
+    const y = mt + 6 + i * 15, x = X(xMax) - 132;
+    g.append(el('line', { x1: x, x2: x + 18, y1: y, y2: y, stroke: c, 'stroke-width': 2.5, 'stroke-dasharray': dash }));
+    g.append(el('text', { class: 'lbl', x: x + 24, y: y + 4 }, t));
+  });
+  svg.append(g);
+}
+
+// ---------------------------------------------------------------- the stack, isometric; fixed scale up to 80 cm
+function drawStack(b) {
+  const svg = $('stack'); svg.replaceChildren();
+  const Cc = Math.cos(Math.PI / 6), W = 480;
+  const k = 380 / (2 * Cc * Math.max(b.side, 80));
+  const s = b.side * k;
+  const gap = b.layers > 1 ? Math.min(10, 84 / (b.layers - 1)) : 0, zTop = (b.layers - 1) * gap;
+  const cx = 205;
+  const P = (x, y, z) => [cx + (x - y) * Cc, (x + y) / 2 - z];
+  const pts = (...ps) => ps.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ');
+  const g = el('g');
+  for (let i = 0; i < b.layers; i++) {
+    const z = i * gap;
+    g.append(el('polygon', { points: pts(P(0, 0, z), P(s, 0, z), P(s, s, z), P(0, s, z)), fill: 'var(--sheet)', stroke: 'var(--sheet-edge)', 'stroke-linejoin': 'round' }));
+  }
+  const [ax, ay] = P(s / 2, s / 2, zTop);
+  g.append(el('line', { x1: ax, x2: ax, y1: ay - 64, y2: ay - 4, stroke: 'var(--accent)', 'stroke-width': 2 }));
+  g.append(el('path', { d: `M${ax - 5},${ay - 12} L${ax},${ay - 4} L${ax + 5},${ay - 12}`, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+  g.append(el('text', { x: ax + 10, y: ay - 54 }, ls(b.Q)));
+  const [lx, ly] = P(0, s, 0), [fx, fy] = P(s, s, 0), nx = -0.5, ny = Cc, off = 12;
+  const d1 = [lx + nx * off, ly + ny * off], d2 = [fx + nx * off, fy + ny * off];
+  g.append(el('line', { x1: d1[0], y1: d1[1], x2: d2[0], y2: d2[1], stroke: 'var(--ink-3)' }));
+  for (const [x, y] of [d1, d2]) g.append(el('line', { x1: x - nx * 5, y1: y - ny * 5, x2: x + nx * 5, y2: y + ny * 5, stroke: 'var(--ink-3)' }));
+  const mx = (d1[0] + d2[0]) / 2 + nx * 14, my = (d1[1] + d2[1]) / 2 + ny * 14;
+  g.append(el('text', { class: 'big', x: mx, y: my, 'text-anchor': 'middle', 'dominant-baseline': 'middle', transform: `rotate(30 ${mx.toFixed(1)} ${my.toFixed(1)})` }, `${fcm(b.side)} cm`));
+  const [rx, ry] = P(s, 0, 0), bx = rx + 12, yTop = ry - zTop;
+  if (b.layers > 1) g.append(el('path', { d: `M${bx - 4},${ry} L${bx},${ry} L${bx},${yTop} L${bx - 4},${yTop}`, fill: 'none', stroke: 'var(--ink-3)' }));
+  g.append(el('text', { class: 'big', x: bx + 8, y: (ry + yTop) / 2, 'dominant-baseline': 'middle' }, `× ${b.layers}`));
+  svg.append(g);
+  const bb = g.getBBox();
+  svg.setAttribute('viewBox', `0 ${(bb.y - 8).toFixed(1)} ${W} ${(bb.height + 16).toFixed(1)}`);
+  svg.setAttribute('aria-label', `${b.layers} layers of ${fcm(b.side)} cm square electret`);
+}
+
+// ---------------------------------------------------------------- init
+{
+  const sel = $('src');
+  for (const s of SOURCES) sel.append(Object.assign(document.createElement('option'), { value: s.id, textContent: s.name }));
+  sel.value = S.src;
+  sel.addEventListener('change', () => { S.src = sel.value; render(); });
+  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³):the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51 and 23.6 L/s at 50 Pa (the 50 Pa bag fill read 20 L/s). ' +
+    '<b>Electret</b>: Arome Livii vacuum-bag electret, 2 cm lost to the seal on each edge of each layer, 20 gsm at $2/kg. ' +
+    '<b>PF</b> is the electret alone (plus the mover\'s own filter if entered); it ignores leaks around the electret and air leaking in.';
+}
+bind('rpr', 'rp', 'roomDp');
+bind(null, 'own', 'own');
+bind(null, 'q50', 'q50');
+bind(null, 'nx', 'n');
+bind(null, 'vm', 'vmax');
+seg('logs', 'logs', Number);
+$('controls').addEventListener('submit', e => e.preventDefault());
+render();
+</script>
