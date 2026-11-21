@@ -78,7 +78,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .cap { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
 .total { display: grid; gap: 2px; justify-items: end; text-align: right; }
 .total b { font-family: var(--font-mono); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
+.spec > div { flex: 1 1 110px; }
+.spec { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
 .spec div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
 .spec dt { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .spec dt .nc, .cap .nc { text-transform: none; }
@@ -201,6 +202,7 @@ const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈
 const CAIR = 10.5;                 // µg/m³ PM2.5 in the air the filter sees (as in those tests)
 const ELECTRET_LOSS = 0.6;         // absolute log10 PF lost per electret layer per g/m² of PM2.5 fed
 const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
+const HORIZON = 100;               // days the room has to run; replacements count towards material
 const MAX_N = 40, SIDE_MAX = 300;  // cm
 
 // Air movers: fan curves as [Q L/s, p Pa] points, piecewise linear, last segment extended to p = 0.
@@ -270,18 +272,26 @@ function check(src, C, n, L, vmax, layers, side) {
   return { ...op, v, logs, layers, side, used: layers * side * side };
 }
 
-// For each layer count, the smallest square (0.5 cm steps) that meets room pressure, logs and face speed at the
-// operating point. Bigger squares lower the electret's resistance, so flow and room pressure rise and face speed falls:
-// every test gets easier as the square grows, so bisection works. Keep the layer count that uses least electret.
+// Objective: least filter material over HORIZON days = square area × layers × max(1, HORIZON / lifetime).
+// For each layer count: the smallest square (0.5 cm steps) that meets room pressure, logs and face speed at the
+// operating point (bigger squares only make these easier, so bisect), then grow the square until it lasts the horizon,
+// keeping the size with least material over the horizon. Past the horizon a bigger square only adds material.
 function design(src, C, n, target, L, vmax) {
   const ok = r => r && r.room >= target - 1e-9 && r.logs >= L - 1e-9 && r.v <= vmax + 1e-9;
+  const ptfe = S.media === 'ptfe', step = ptfe ? 2 : 1;
   let best = null;
-  for (let layers = 1; layers <= MAX_N; layers++) {
+  for (let layers = 1; layers <= (ptfe ? 6 : MAX_N); layers++) {
     let lo = Math.ceil(2 * (2 * MARGIN + 0.5)), hi = 2 * SIDE_MAX;
     if (!ok(check(src, C, n, L, vmax, layers, hi / 2))) continue;
     while (lo < hi) { const m = (lo + hi) >> 1; if (ok(check(src, C, n, L, vmax, layers, m / 2))) hi = m; else lo = m + 1; }
-    const r = check(src, C, n, L, vmax, layers, lo / 2);
-    if (!best || r.used < best.used - 1e-9) best = r;
+    for (let k = lo; k <= 2 * SIDE_MAX; k += step) {
+      const r = check(src, C, n, L, vmax, layers, k / 2);
+      if (!ok(r)) continue;
+      r.life = life(r, src, C, n);
+      r.total = r.used * Math.max(1, HORIZON / Math.max(r.life, 1e-6));
+      if (!best || r.total < best.total - 1e-9) best = r;
+      if (r.life >= HORIZON || (best && r.used > best.total)) break;
+    }
   }
   return best;
 }
@@ -300,8 +310,8 @@ function life(b, src, C, n) {
     return (b.logs - floor) / (b.layers * ELECTRET_LOSS * perDay(b.v));
   }
   let m = 0, t = 0;
-  const dt = 0.25;
-  while (t < 2000) {
+  const dt = 0.5;
+  while (t < HORIZON) {
     const op = operate(src, C, n, b.layers, aEff, CAKE_K * m);
     if (!op || op.room < 0.75 * b.room) return t;
     m += perDay(op.Q * 1000 / aEff) * dt;
@@ -380,7 +390,8 @@ function render() {
     ['Filter Δp', pa(b.filt)],
     ['Face speed*', `${b.v.toFixed(1)} cm/s`],
     ['PF at 0.3 µm', S.own > 0 ? `${pfStr(b.logs)} × ${pfStr(S.own)} = ${pfStr(b.logs + S.own)}` : pfStr(b.logs)],
-    ['Lasts†', daysStr(life(b, src, C, n))],
+    ['Lasts†', b.life >= HORIZON ? `> ${HORIZON} days` : daysStr(b.life)],
+    [`Over ${HORIZON} days`, b.life >= HORIZON ? 'no changes' : `${(b.total / 1e4).toFixed(2)} m² (${Math.ceil(HORIZON / b.life)} filters)`],
   ];
   for (const [k, v] of rows) {
     const d = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -491,6 +502,7 @@ function drawStack(b) {
     'Both lose 2 cm to the seal on each edge of each layer.<br>' +
     '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
     `* Face speed is capped at ${S.vmax} cm/s.<br>` +
+    `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
     `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target, losing ${ELECTRET_LOSS} logs per layer per g/m² fed (ambient-air tests, 10–17 Nov). ` +
     'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
