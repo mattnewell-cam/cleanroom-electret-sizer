@@ -196,9 +196,10 @@ const MARGIN = 2;                  // cm lost to the seal on every side of every
 const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈ 2.1
 // Filter life (see life()). Electret rate from the ambient-air loading tests (10–17 Nov 2026, "Electret loading
 // tests" sheet): single-layer filters b, c, e at ~15 cm/s for 6.45 days lost 0.68 / 0.34 / 0.63 log10 PF at 0.3 µm,
-// with ~25 µg/m³ PM2.5 upstream → ~2.1 g/m² fed → ~0.24 logs per layer per g/m² (0.16–0.33).
-const CAIR = 25;                   // µg/m³ PM2.5 in the air the filter sees (as in those tests)
-const ELECTRET_LOSS = 0.24;        // absolute log10 PF lost per electret layer per g/m² of PM2.5 fed
+// with upstream PM2.5 time-averaged over BG1–BG7 at ~10.5 µg/m³ → ~0.9 g/m² fed → ~0.6 logs per layer per g/m²
+// (0.37–0.74).
+const CAIR = 10.5;                 // µg/m³ PM2.5 in the air the filter sees (as in those tests)
+const ELECTRET_LOSS = 0.6;         // absolute log10 PF lost per electret layer per g/m² of PM2.5 fed
 const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
 const MAX_N = 40, SIDE_MAX = 300;  // cm
 
