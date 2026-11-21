@@ -93,7 +93,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 #stack text.big { font-size: 15px; font-weight: 500; fill: var(--ink); }
 #pq text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); }
 #pq text.lbl { font-size: 11px; font-weight: 500; fill: var(--ink-2); }
-.note { margin: 0; font-size: 12.5px; color: var(--ink-3); max-width: 80ch; }
+.note { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--ink-3); max-width: 80ch; }
 .note b { color: var(--ink-2); font-weight: 600; }
 </style>
 
@@ -448,11 +448,11 @@ function drawStack(b) {
   for (const s of SOURCES) sel.append(Object.assign(document.createElement('option'), { value: s.id, textContent: s.name }));
   sel.value = S.src;
   sel.addEventListener('change', () => { S.src = sel.value; render(); });
-  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³): the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51, which the page keeps for any room. ' +
-    '<b>Electret</b>: Arome Livii vacuum-bag electret, measured at 4.9–5.9 cm/s, 20 gsm at $2/kg. ' +
-    '<b>PTFE</b>: H13 ePTFE membrane, 120 Pa and 99.95% at 5.3 cm/s (data sheet; QF ≈ 63 kPa⁻¹), $1.0/m²; at other speeds log PF ∝ v^−2/3 is assumed. ' +
-    'Both lose 2 cm to the seal on each edge of each layer. ' +
-    '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered); it ignores leaks around the filter and air leaking in. ' +
+  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³): the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51, which the page keeps for any room.<br>' +
+    '<b>Electret</b>: Arome Livii vacuum-bag electret, measured at 4.9–5.9 cm/s, 20 gsm at $2/kg.<br>' +
+    '<b>PTFE</b>: H13 ePTFE membrane, 120 Pa and 99.95% at 5.3 cm/s (data sheet; QF ≈ 63 kPa⁻¹), $1.0/m². At other speeds log PF ∝ v^−2/3 is assumed.<br>' +
+    'Both lose 2 cm to the seal on each edge of each layer.<br>' +
+    '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
     `* Face speed is capped at ${S.vmax} cm/s.`;
 }
 bind('rpr', 'rp', 'roomDp');
