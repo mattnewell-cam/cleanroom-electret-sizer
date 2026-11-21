@@ -305,14 +305,14 @@ function design(src, C, n, target, L, vmax) {
 // Electret: each layer = mechanical logs (MECH_FRAC) + charged logs, and the charged part falls linearly to zero as
 // that layer catches M_STAR g/m². Each layer catches dust at its current efficiency (0.3 µm PF used for PM2.5 mass)
 // and passes the rest on, so front layers go first and keep shielding the rest mechanically. Life ends when total
-// logs fall to 80% of the target's. PTFE: a surface cake adds CAKE_K Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl,
+// logs fall below the target's. PTFE: a surface cake adds CAKE_K Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl,
 // 82.5 Pa per g/m² at 5.3 cm/s); flow falls as it builds, and life ends when room pressure is 25% below its start.
 function life(b, src, C, n) {
   const aEff = (b.side - 2 * MARGIN) ** 2;
   const perDay = v => CAIR * 1e-6 * (v / 100) * 86400;                    // g/m² per day at face speed v (cm/s)
   if (S.media === 'electret') {
-    const floor = 0.8 * S.logs - S.own;
-    if (b.logs <= floor) return 0;
+    const floor = S.logs - S.own;                      // PF must stay at or above the target the whole time
+    if (b.logs < floor) return 0;
     const dep = new Array(b.layers).fill(0), dt = 0.5;
     for (let t = 0; t < HORIZON; t += dt) {
       const op = operate(src, C, n, b.layers, aEff, KE * dep.reduce((s, x) => s + x, 0));
@@ -325,7 +325,7 @@ function life(b, src, C, n) {
         dep[i] += f * (1 - P) * dt;
         f *= P;
       }
-      if (total <= floor) return t;
+      if (total < floor) return t;
     }
     return Infinity;
   }
@@ -523,7 +523,7 @@ function drawStack(b) {
     '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
     `* Face speed is capped at ${S.vmax} cm/s.<br>` +
     `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
-    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. Caught dust also adds 4.2 Pa per (cm/s · g/m²) (Ando et al. 1993), and life ends early if room pressure falls 25%. ` +
+    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls below the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. Caught dust also adds 4.2 Pa per (cm/s · g/m²) (Ando et al. 1993), and life ends early if room pressure falls 25%. ` +
     'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
 bind('rpr', 'rp', 'roomDp');
