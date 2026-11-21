@@ -196,11 +196,12 @@ const MARGIN = 2;                  // cm lost to the seal on every side of every
 // CO₂: 4 people at 0.30 L/min each (measured from one person at rest, 21 Nov), room held under 1% with 420 ppm outside.
 const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈ 2.1
 // Filter life (see life()). Electret, order of magnitude from the ambient-air loading tests (10–17 Nov 2026,
-// "Electret loading tests" sheet): single layers lost their charged part after roughly 0.4–0.75 g/m² of PM2.5 at
-// ~10.5 µg/m³ upstream; IPA/DIW-discharged layers gave PF 2.3–2.5 (0.37–0.40 logs) against 1.0–1.5 logs charged.
+// "Electret loading tests" sheet): IPA/DIW-discharged layers gave PF 2.3–2.5 (~0.38 logs). Single layers b, c, e went
+// from 1.04–1.48 logs to 0.70–0.85 by BG7 (~0.75 g/m² PM2.5 fed, ~0.7 caught): 52–63% of the charged logs gone, so
+// all of it at ~1.2 g/m² caught if linear.
 const CAIR = 10.5;                 // µg/m³ PM2.5 in the air the filter sees (as in those tests)
 const MECH_FRAC = 0.3;             // share of a layer's logs that is mechanical (stays when the charge is gone)
-const M_STAR = 0.6;                // g/m² of PM2.5 caught on a layer that removes all of its charged part
+const M_STAR = 1.2;                // g/m² of PM2.5 caught on a layer that removes all of its charged part
 const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
 const HORIZON = 100;               // days the room has to run; replacements count towards material
 const MAX_N = 40, SIDE_MAX = 300;  // cm
