@@ -78,7 +78,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .cap { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
 .total { display: grid; gap: 2px; justify-items: end; text-align: right; }
 .total b { font-family: var(--font-mono); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
 .spec div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
 .spec dt { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .spec dt .nc, .cap .nc { text-transform: none; }
@@ -192,6 +192,14 @@ const MEDIA = {
 };
 let M = MEDIA.electret;
 const MARGIN = 2;                  // cm lost to the seal on every side of every layer
+// CO₂: 4 people at 0.30 L/min each (measured from one person at rest, 21 Nov), room held under 1% with 420 ppm outside.
+const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈ 2.1
+// Filter life (see life()). Electret rate from the ambient-air loading tests (10–17 Nov 2026, "Electret loading
+// tests" sheet): single-layer filters b, c, e at ~15 cm/s for 6.45 days lost 0.68 / 0.34 / 0.63 log10 PF at 0.3 µm,
+// with ~25 µg/m³ PM2.5 upstream → ~2.1 g/m² fed → ~0.24 logs per layer per g/m² (0.16–0.33).
+const CAIR = 25;                   // µg/m³ PM2.5 in the air the filter sees (as in those tests)
+const ELECTRET_LOSS = 0.24;        // absolute log10 PF lost per electret layer per g/m² of PM2.5 fed
+const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
 const MAX_N = 40, SIDE_MAX = 300;  // cm
 
 // Air movers: fan curves as [Q L/s, p Pa] points, piecewise linear, last segment extended to p = 0.
@@ -241,8 +249,9 @@ const leakDp = (Q, C, n) => Math.pow(Q / C, 1 / n);
 const leakQ = (dp, C, n) => C * Math.pow(dp, n);
 
 // Operating point: fan pressure = room pressure (leaks) + electret Δp. All terms monotonic, so bisect.
-function operate(src, C, n, layers, aEff) {
-  const filt = Q => layers > 0 ? layers * M.R * (Q * 1000 / aEff) : 0;
+// cake: extra resistance from a loaded dust cake, Pa per cm/s (PTFE only).
+function operate(src, C, n, layers, aEff, cake = 0) {
+  const filt = Q => layers > 0 ? (layers * M.R + cake) * (Q * 1000 / aEff) : 0;
   const f = Q => fanP(src.pts, Q) - leakDp(Q, C, n) - filt(Q);
   let lo = 0, hi = fanQzero(src.pts);
   if (f(hi) > 0) return null;
@@ -276,6 +285,31 @@ function design(src, C, n, target, L, vmax) {
   return best;
 }
 
+// ---------------------------------------------------------------- filter life
+// Particle mass reaching the filter, g/m² per day = CAIR (µg/m³) × face speed × time.
+// Electret: loses ELECTRET_LOSS absolute logs per layer per g/m² fed (ambient-air tests); life ends when total logs
+// fall 20% below the target's logs. PTFE: a surface cake adds CAKE_K Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl,
+// 82.5 Pa per g/m² at 5.3 cm/s); flow falls as it builds, and life ends when room pressure is 25% below its start.
+function life(b, src, C, n) {
+  const aEff = (b.side - 2 * MARGIN) ** 2;
+  const perDay = v => CAIR * 1e-6 * (v / 100) * 86400;                    // g/m² per day at face speed v (cm/s)
+  if (S.media === 'electret') {
+    const floor = 0.8 * S.logs - S.own;
+    if (b.logs <= floor) return 0;
+    return (b.logs - floor) / (b.layers * ELECTRET_LOSS * perDay(b.v));
+  }
+  let m = 0, t = 0;
+  const dt = 0.25;
+  while (t < 2000) {
+    const op = operate(src, C, n, b.layers, aEff, CAKE_K * m);
+    if (!op || op.room < 0.75 * b.room) return t;
+    m += perDay(op.Q * 1000 / aEff) * dt;
+    t += dt;
+  }
+  return Infinity;
+}
+const daysStr = d => d < 1 ? '< 1 day' : d < 1.5 ? '1 day' : d < 60 ? `${Math.round(d)} days` : d < 730 ? `${Math.round(d / 30.4)} months` : '> 2 years';
+
 // ---------------------------------------------------------------- state & inputs
 const $ = id => document.getElementById(id);
 const S = { src: 'h1', media: 'electret', roomDp: 5, logs: 3, own: 0, mp: 16, mq: 13.2, n: 0.51, vmax: 20 };
@@ -298,7 +332,7 @@ const fcm = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
 const f1 = x => x >= 100 ? Math.round(x).toLocaleString('en-GB') : x >= 10 ? x.toFixed(1) : x.toFixed(2);
 const pa = x => `${x >= 10 ? Math.round(x) : x.toFixed(1)} Pa`;
 const ls = q => `${q.toFixed(1)} L/s`;
-const pfStr = L => Number(Math.pow(10, L).toPrecision(2)).toLocaleString('en-GB');
+const pfStr = L => L >= 5 ? '> 100,000' : Number(Math.pow(10, L).toPrecision(2)).toLocaleString('en-GB');
 const usd = x => '≈ $' + (x < 1 ? x.toPrecision(2) : x.toFixed(2));
 const el = (tag, attrs = {}, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
 
@@ -342,9 +376,10 @@ function render() {
   const rows = [
     ['Airflow', `${ls(b.Q)} · ${Math.round(b.Q * 3.6)} m³/h`],
     ['Room pressure', pa(b.room)],
-    ['Electret Δp', pa(b.filt)],
+    ['Filter Δp', pa(b.filt)],
     ['Face speed*', `${b.v.toFixed(1)} cm/s`],
     ['PF at 0.3 µm', S.own > 0 ? `${pfStr(b.logs)} × ${pfStr(S.own)} = ${pfStr(b.logs + S.own)}` : pfStr(b.logs)],
+    ['Lasts†', daysStr(life(b, src, C, n))],
   ];
   for (const [k, v] of rows) {
     const d = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -354,6 +389,7 @@ function render() {
     dd.textContent = v; d.append(dt, dd); spec.append(d);
   }
   if (b.v > M.hi || b.v < M.lo) flag(`Face speed ${b.v.toFixed(1)} cm/s is outside ${M.range}`);
+  if (b.Q < CO2_MIN_LS) flag(`Airflow ${ls(b.Q)} is below the ${ls(CO2_MIN_LS)} that keeps CO₂ under 1% with 4 people in the room`);
   if (b.room > S.roomDp * 1.5 + 1) flag(`The mover pushes the room to ${pa(b.room)}, above the ${pa(S.roomDp)} asked for`);
 
   drawStack(b);
@@ -399,7 +435,7 @@ function drawPQ(src, C, n, b) {
   curves.append(el('line', { x1: X(0), x2: X(xMax), y1: Y(S.roomDp), y2: Y(S.roomDp), stroke: 'var(--ink-3)', 'stroke-width': 1, 'stroke-dasharray': '1 3' }));
   g.append(curves);
   // legend
-  const lg = [['var(--fan)', 'fan', ''], ['var(--leak)', 'room leaks', '5 4'], ['var(--sys)', 'leaks + electret', '']];
+  const lg = [['var(--fan)', 'fan', ''], ['var(--leak)', 'room leaks', '5 4'], ['var(--sys)', 'leaks + filter', '']];
   lg.forEach(([c, t, dash], i) => {
     const y = mt + 6 + i * 15, x = X(xMax) - 132;
     g.append(el('line', { x1: x, x2: x + 18, y1: y, y2: y, stroke: c, 'stroke-width': 2.5, 'stroke-dasharray': dash }));
@@ -453,7 +489,9 @@ function drawStack(b) {
     '<b>PTFE</b>: H13 ePTFE membrane, 120 Pa and 99.95% at 5.3 cm/s (data sheet; QF ≈ 63 kPa⁻¹), $1.0/m². At other speeds log PF ∝ v^−2/3 is assumed.<br>' +
     'Both lose 2 cm to the seal on each edge of each layer.<br>' +
     '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
-    `* Face speed is capped at ${S.vmax} cm/s.`;
+    `* Face speed is capped at ${S.vmax} cm/s.<br>` +
+    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target, losing ${ELECTRET_LOSS} logs per layer per g/m² fed (ambient-air tests, 10–17 Nov). ` +
+    'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
 bind('rpr', 'rp', 'roomDp');
 bind(null, 'own', 'own');
