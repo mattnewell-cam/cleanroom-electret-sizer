@@ -138,11 +138,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           <input type="number" id="nx" min="0.5" max="1" step="0.01">
           <div class="out"><span>Leakage area at 4 Pa</span><b id="o-ela"></b></div>
         </div>
-        <div class="field">
-          <label for="vm">Fastest face speed allowed <span class="u">cm/s</span></label>
-          <input type="number" id="vm" min="1" max="100" step="0.5">
-          <p class="hint">The electret was measured at 4.9–5.9 cm/s. Faster than that is extrapolated.</p>
-        </div>
       </div>
     </form>
 
@@ -323,7 +318,7 @@ function render() {
     ['Airflow', `${ls(b.Q)} · ${Math.round(b.Q * 3.6)} m³/h`],
     ['Room pressure', pa(b.room)],
     ['Electret Δp', pa(b.filt)],
-    ['Face speed', `${b.v.toFixed(1)} cm/s`],
+    ['Face speed*', `${b.v.toFixed(1)} cm/s`],
     ['PF at 0.3 µm', S.own > 0 ? `${pfStr(b.logs)} × ${pfStr(S.own)} = ${pfStr(b.logs + S.own)}` : pfStr(b.logs)],
   ];
   for (const [k, v] of rows) {
@@ -431,13 +426,13 @@ function drawStack(b) {
   sel.addEventListener('change', () => { S.src = sel.value; render(); });
   $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³):the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51 and 23.6 L/s at 50 Pa (the 50 Pa bag fill read 20 L/s). ' +
     '<b>Electret</b>: Arome Livii vacuum-bag electret, 2 cm lost to the seal on each edge of each layer, 20 gsm at $2/kg. ' +
-    '<b>PF</b> is the electret alone (plus the mover\'s own filter if entered); it ignores leaks around the electret and air leaking in.';
+    '<b>PF</b> is the electret alone (plus the mover\'s own filter if entered); it ignores leaks around the electret and air leaking in. ' +
+    `* Face speed is capped at ${S.vmax} cm/s; the electret was measured at 4.9–5.9 cm/s.`;
 }
 bind('rpr', 'rp', 'roomDp');
 bind(null, 'own', 'own');
 bind(null, 'q50', 'q50');
 bind(null, 'nx', 'n');
-bind(null, 'vm', 'vmax');
 seg('logs', 'logs', Number);
 $('controls').addEventListener('submit', e => e.preventDefault());
 render();
