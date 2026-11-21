@@ -195,12 +195,12 @@ let M = MEDIA.electret;
 const MARGIN = 2;                  // cm lost to the seal on every side of every layer
 // CO₂: 4 people at 0.30 L/min each (measured from one person at rest, 21 Nov), room held under 1% with 420 ppm outside.
 const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈ 2.1
-// Filter life (see life()). Electret rate from the ambient-air loading tests (10–17 Nov 2026, "Electret loading
-// tests" sheet): single-layer filters b, c, e at ~15 cm/s for 6.45 days lost 0.68 / 0.34 / 0.63 log10 PF at 0.3 µm,
-// with upstream PM2.5 time-averaged over BG1–BG7 at ~10.5 µg/m³ → ~0.9 g/m² fed → ~0.6 logs per layer per g/m²
-// (0.37–0.74).
+// Filter life (see life()). Electret, order of magnitude from the ambient-air loading tests (10–17 Nov 2026,
+// "Electret loading tests" sheet): single layers lost their charged part after roughly 0.4–0.75 g/m² of PM2.5 at
+// ~10.5 µg/m³ upstream; IPA/DIW-discharged layers gave PF 2.3–2.5 (0.37–0.40 logs) against 1.0–1.5 logs charged.
 const CAIR = 10.5;                 // µg/m³ PM2.5 in the air the filter sees (as in those tests)
-const ELECTRET_LOSS = 0.6;         // absolute log10 PF lost per electret layer per g/m² of PM2.5 fed
+const MECH_FRAC = 0.3;             // share of a layer's logs that is mechanical (stays when the charge is gone)
+const M_STAR = 0.6;                // g/m² of PM2.5 caught on a layer that removes all of its charged part
 const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
 const HORIZON = 100;               // days the room has to run; replacements count towards material
 const MAX_N = 40, SIDE_MAX = 300;  // cm
@@ -297,9 +297,11 @@ function design(src, C, n, target, L, vmax) {
 }
 
 // ---------------------------------------------------------------- filter life
-// Particle mass reaching the filter, g/m² per day = CAIR (µg/m³) × face speed × time.
-// Electret: loses ELECTRET_LOSS absolute logs per layer per g/m² fed (ambient-air tests); life ends when total logs
-// fall 20% below the target's logs. PTFE: a surface cake adds CAKE_K Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl,
+// Particle mass reaching the filter face, g/m² per day = CAIR (µg/m³) × face speed × time.
+// Electret: each layer = mechanical logs (MECH_FRAC) + charged logs, and the charged part falls linearly to zero as
+// that layer catches M_STAR g/m². Each layer catches dust at its current efficiency (0.3 µm PF used for PM2.5 mass)
+// and passes the rest on, so front layers go first and keep shielding the rest mechanically. Life ends when total
+// logs fall to 80% of the target's. PTFE: a surface cake adds CAKE_K Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl,
 // 82.5 Pa per g/m² at 5.3 cm/s); flow falls as it builds, and life ends when room pressure is 25% below its start.
 function life(b, src, C, n) {
   const aEff = (b.side - 2 * MARGIN) ** 2;
@@ -307,7 +309,19 @@ function life(b, src, C, n) {
   if (S.media === 'electret') {
     const floor = 0.8 * S.logs - S.own;
     if (b.logs <= floor) return 0;
-    return (b.logs - floor) / (b.layers * ELECTRET_LOSS * perDay(b.v));
+    const L1 = b.logs / b.layers, mech = MECH_FRAC * L1, es = L1 - mech;
+    const dep = new Array(b.layers).fill(0), flux = perDay(b.v), dt = HORIZON / 400;
+    for (let t = 0; t < HORIZON; t += dt) {
+      let total = 0, f = flux;
+      for (let i = 0; i < b.layers; i++) {
+        const li = mech + es * Math.max(0, 1 - dep[i] / M_STAR), P = Math.pow(10, -li);
+        total += li;
+        dep[i] += f * (1 - P) * dt;
+        f *= P;
+      }
+      if (total <= floor) return t;
+    }
+    return Infinity;
   }
   let m = 0, t = 0;
   const dt = 0.5;
@@ -503,7 +517,7 @@ function drawStack(b) {
     '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
     `* Face speed is capped at ${S.vmax} cm/s.<br>` +
     `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
-    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target, losing ${ELECTRET_LOSS} logs per layer per g/m² fed (ambient-air tests, 10–17 Nov). ` +
+    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. ` +
     'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
 bind('rpr', 'rp', 'roomDp');
