@@ -202,6 +202,9 @@ const CO2_MIN_LS = 4 * 0.30 / 60 / (0.01 - 0.00042);   // L/s of supply air, ≈
 const CAIR = 10.5;                 // µg/m³ PM2.5 in the air the filter sees (as in those tests)
 const MECH_FRAC = 0.3;             // share of a layer's logs that is mechanical (stays when the charge is gone)
 const M_STAR = 1.2;                // g/m² of PM2.5 caught on a layer that removes all of its charged part
+// Electret Δp rise with dust caught: PP meltblown electret on fine room air, 55 → 160 Pa over 10 g/m² at 2.5 cm/s
+// (Ando et al. 1993, in DIY-PAPR/filter bank/electrostatics.md) = 4.2 Pa per (cm/s · g/m²), summed over the layers.
+const KE = (160 - 55) / (2.5 * 10);
 const CAKE_K = 82.5 / 5.3;         // Pa per (cm/s · g/m²), PTFE cake, Zhang et al. 2018
 const HORIZON = 100;               // days the room has to run; replacements count towards material
 const MAX_N = 40, SIDE_MAX = 300;  // cm
@@ -281,7 +284,7 @@ function design(src, C, n, target, L, vmax) {
   const ok = r => r && r.room >= target - 1e-9 && r.logs >= L - 1e-9 && r.v <= vmax + 1e-9;
   const ptfe = S.media === 'ptfe', step = ptfe ? 2 : 1;
   let best = null;
-  for (let layers = 1; layers <= (ptfe ? 6 : MAX_N); layers++) {
+  for (let layers = 1; layers <= (ptfe ? 6 : 15); layers++) {
     let lo = Math.ceil(2 * (2 * MARGIN + 0.5)), hi = 2 * SIDE_MAX;
     if (!ok(check(src, C, n, L, vmax, layers, hi / 2))) continue;
     while (lo < hi) { const m = (lo + hi) >> 1; if (ok(check(src, C, n, L, vmax, layers, m / 2))) hi = m; else lo = m + 1; }
@@ -310,10 +313,12 @@ function life(b, src, C, n) {
   if (S.media === 'electret') {
     const floor = 0.8 * S.logs - S.own;
     if (b.logs <= floor) return 0;
-    const L1 = b.logs / b.layers, mech = MECH_FRAC * L1, es = L1 - mech;
-    const dep = new Array(b.layers).fill(0), flux = perDay(b.v), dt = HORIZON / 400;
+    const dep = new Array(b.layers).fill(0), dt = 0.5;
     for (let t = 0; t < HORIZON; t += dt) {
-      let total = 0, f = flux;
+      const op = operate(src, C, n, b.layers, aEff, KE * dep.reduce((s, x) => s + x, 0));
+      if (!op || op.room < 0.75 * b.room) return t;
+      const v = op.Q * 1000 / aEff, L1 = M.D * Math.pow(v, -M.a), mech = MECH_FRAC * L1, es = L1 - mech;
+      let total = 0, f = perDay(v);
       for (let i = 0; i < b.layers; i++) {
         const li = mech + es * Math.max(0, 1 - dep[i] / M_STAR), P = Math.pow(10, -li);
         total += li;
@@ -518,7 +523,7 @@ function drawStack(b) {
     '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
     `* Face speed is capped at ${S.vmax} cm/s.<br>` +
     `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
-    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. ` +
+    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls to 20% fewer logs than the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. Caught dust also adds 4.2 Pa per (cm/s · g/m²) (Ando et al. 1993), and life ends early if room pressure falls 25%. ` +
     'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
 bind('rpr', 'rp', 'roomDp');
