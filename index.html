@@ -57,6 +57,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .out { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-3); padding: 5px 9px; background: var(--bg); border-radius: 6px; }
 .out b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
 .hint { font-size: 12px; color: var(--ink-3); margin: 0; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pair .field > label { flex-wrap: wrap; gap: 0 6px; }
 .minor { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--line); }
 .minor .cap { margin-bottom: -6px; }
 .seg { display: grid; grid-template-columns: repeat(var(--n, 2), 1fr); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
@@ -129,11 +131,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
       <div class="minor">
         <span class="cap">Room leakage, Q = C·Δpⁿ</span>
-        <div class="field">
-          <label for="q50">Leak flow at 50 Pa <span class="u">L/s</span></label>
-          <input type="number" id="q50" min="1" max="500" step="0.1">
-          <div class="out"><span>Leakage area (Cd = 1)</span><b id="o-ela"></b></div>
+        <span class="lab hint">One measured point: room pressure and the flow that held it.</span>
+        <div class="pair">
+          <div class="field">
+            <label for="mp">Pressure <span class="u">Pa</span></label>
+            <input type="number" id="mp" min="0.1" max="500" step="0.5">
+          </div>
+          <div class="field">
+            <label for="mq">Flow <span class="u">L/s</span></label>
+            <input type="number" id="mq" min="0.1" max="500" step="0.1">
+          </div>
         </div>
+        <div class="out"><span>Implied leak area (Cd = 1)</span><b id="o-ela"></b></div>
       </div>
     </form>
 
@@ -251,7 +260,7 @@ function design(src, C, n, target, L, vmax) {
 
 // ---------------------------------------------------------------- state & inputs
 const $ = id => document.getElementById(id);
-const S = { src: 'h1', roomDp: 5, logs: 3, own: 0, q50: 23.6, n: 0.51, vmax: 20 };
+const S = { src: 'h1', roomDp: 5, logs: 3, own: 0, mp: 16, mq: 13.2, n: 0.51, vmax: 20 };
 
 function bind(rid, nid, key) {
   const r = rid && $(rid), nn = $(nid);
@@ -280,12 +289,12 @@ function render() {
   const src = SOURCES.find(s => s.id === S.src);
   $('src-note').textContent = src.note;
   const n = Math.min(1, Math.max(0.5, S.n));
-  const C = S.q50 / Math.pow(50, n);
+  const C = S.mq / Math.pow(S.mp, n);
+  $('o-ela').textContent = `${Math.round(leakQ(4, C, n) / 1000 / Math.sqrt(2 * 4 / 1.2) * 1e4)} cm²`;
   const L = Math.max(0, S.logs - S.own);
 
   const bare = operate(src, C, n, 0, 1);
   $('o-max').textContent = bare ? `${pa(bare.room)} at ${ls(bare.Q)}` : '—';
-  $('o-ela').textContent = `${(leakQ(4, C, n) / 1000 / Math.sqrt(2 * 4 / 1.2) * 1e4).toFixed(0)} cm²`;
 
   const flags = $('flags'); flags.replaceChildren();
   const flag = txt => { const d = document.createElement('span'); d.className = 'flag'; d.textContent = txt; flags.append(d); };
@@ -420,14 +429,15 @@ function drawStack(b) {
   for (const s of SOURCES) sel.append(Object.assign(document.createElement('option'), { value: s.id, textContent: s.name }));
   sel.value = S.src;
   sel.addEventListener('change', () => { S.src = sel.value; render(); });
-  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³):the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51 and 23.6 L/s at 50 Pa (the 50 Pa bag fill read 20 L/s). ' +
+  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³): the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51, which the page keeps for any room. ' +
     '<b>Electret</b>: Arome Livii vacuum-bag electret, 2 cm lost to the seal on each edge of each layer, 20 gsm at $2/kg. ' +
     '<b>PF</b> is the electret alone (plus the mover\'s own filter if entered); it ignores leaks around the electret and air leaking in. ' +
     `* Face speed is capped at ${S.vmax} cm/s; the electret was measured at 4.9–5.9 cm/s.`;
 }
 bind('rpr', 'rp', 'roomDp');
 bind(null, 'own', 'own');
-bind(null, 'q50', 'q50');
+bind(null, 'mp', 'mp');
+bind(null, 'mq', 'mq');
 seg('logs', 'logs', Number);
 $('controls').addEventListener('submit', e => e.preventDefault());
 render();
