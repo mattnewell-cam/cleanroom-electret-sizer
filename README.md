@@ -15,5 +15,7 @@ electret (square side × layers) that reaches the PF you ask for at 0.3 µm.
 - Electret per layer: Δp = 2.58·v Pa, log10 PF = 1.5863·v^−0.307 at 0.3 µm (v in cm/s), fitted to vacuum-bag
   electret measured at 4.9–5.9 cm/s. Outside that range it is extrapolated, and the page says so.
 - PF is the electret alone. It ignores leaks around the electret and air leaking into the room.
+- A Metric | Imperial toggle converts every shown value (pressure stays in Pa). Electret results also give the number
+  of paper vacuum bags to cut up, taking one Arome Livii bag opened out as one 62 × 69 cm ply (0.428 m²).
 
 Single file, no build step.

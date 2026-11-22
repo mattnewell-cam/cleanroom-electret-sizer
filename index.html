@@ -107,6 +107,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <div class="main">
     <form class="panel controls" id="controls" autocomplete="off">
       <div class="field">
+        <span class="lab">Units</span>
+        <div class="seg" style="--n:2" role="group" aria-label="Units">
+          <button type="button" data-units="metric">Metric</button>
+          <button type="button" data-units="imperial">Imperial</button>
+        </div>
+      </div>
+      <div class="field">
         <label for="src">Air mover</label>
         <select id="src"></select>
         <p class="hint" id="src-note"></p>
@@ -145,7 +152,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
             <input type="number" id="mp" min="0.1" max="500" step="0.5">
           </div>
           <div class="field">
-            <label for="mq">Airflow <span class="u">L/s</span></label>
+            <label for="mq">Airflow <span class="u" id="mq-u">L/s</span></label>
             <input type="number" id="mq" min="0.1" max="500" step="0.1">
           </div>
         </div>
@@ -156,12 +163,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <section class="panel answer" aria-live="polite">
       <div class="top">
         <div class="hero">
-          <div class="fig"><span class="cap">Square side</span><span class="num"><span id="h-side">—</span><small>cm</small></span></div>
+          <div class="fig"><span class="cap">Square side</span><span class="num"><span id="h-side">—</span><small id="h-side-u">cm</small></span></div>
           <div class="fig"><span class="cap">Layers</span><span class="num" id="h-n">—</span></div>
         </div>
-        <div class="fig total"><span class="cap" id="t-cap">Electret</span><span class="num"><span id="t-area">—</span><small>m²</small></span></div>
+        <div class="fig total"><span class="cap" id="t-cap">Electret</span><span class="num"><span id="t-area">—</span><small id="t-area-u">m²</small></span></div>
         <span class="basis" id="t-basis"></span>
         <span class="cost" id="t-cost"></span>
+        <span class="cost" id="t-bags" style="grid-column: 2; white-space: normal"></span>
       </div>
       <dl class="spec" id="spec"></dl>
       <div class="flags" id="flags"></div>
@@ -183,14 +191,22 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 const GSM = 20, USD_PER_KG = 2;    // charged surgical-grade meltblown, bulk
 const MEDIA = {
   electret: { name: 'Electret', R: 2.58, D: 1.5863, a: 0.3070, lo: 4.9, hi: 5.9,
-    basis: `Electret at ${GSM} gsm`,
-    cost: m2 => `${Math.round(m2 * GSM)} g · ${usd(m2 * GSM / 1000 * USD_PER_KG)} at $${USD_PER_KG}/kg`,
-    range: 'the 4.9–5.9 cm/s the electret was measured at' },
+    basis: () => `Electret at ${gsm(GSM)}`,
+    cost: m2 => `${mass(m2 * GSM)} · ${usd(m2 * GSM / 1000 * USD_PER_KG)} at ${perKg(USD_PER_KG)}`,
+    range: () => `the ${vRange(4.9, 5.9)} the electret was measured at` },
   ptfe: { name: 'PTFE', R: 120 / 5.3, D: 3.3 * Math.pow(5.3, 2 / 3), a: 2 / 3, lo: 4.5, hi: 6.1,
-    basis: 'H13 ePTFE membrane',
-    cost: m2 => `${usd(m2 * 1.0)} at $1.0/m²`,
-    range: 'the 5.3 cm/s the PTFE is rated at; PF away from it assumes log PF ∝ v^−2/3' },
+    basis: () => 'H13 ePTFE membrane',
+    cost: m2 => `${usd(m2 * 1.0)} at ${perM2(1.0)}`,
+    range: () => `the ${speed(5.3)} the PTFE is rated at; PF away from it assumes log PF ∝ v^−2/3` },
 };
+// Paper vacuum bags: one Arome Livii bag opened out is one 62 × 69 cm ply (0.428 m²), the default sheet in
+// DIY-PAPR/filter bank/electret_bag_calculator. Count = whole squares that fit on a ply; by area if a square is bigger.
+const BAG_W = 62, BAG_H = 69;
+function bags(side, squares) {
+  const fit = side <= BAG_W ? Math.floor(BAG_W / side) * Math.floor(BAG_H / side) : 0;
+  const k = fit ? Math.ceil(squares / fit) : Math.ceil(squares * side * side / (BAG_W * BAG_H));
+  return `≈ ${k} paper vacuum bag${k === 1 ? '' : 's'}${fit ? '' : ' (by area: the square is bigger than one bag)'}`;
+}
 let M = MEDIA.electret;
 const MARGIN = 2;                  // cm lost to the seal on every side of every layer
 // CO₂: 4 people at 0.30 L/min each (measured from one person at rest, 21 Nov), room held under 1% with 420 ppm outside.
@@ -221,13 +237,13 @@ const P3 = [[0, 36], [4.4, 36], [12, 35], [30.3, 34], [65, 31], [109.9, 28], [14
 const RW = Math.sqrt(24 / 35.2);
 const SOURCES = [
   { id: 'h1', name: 'Hoover, heater on 1 (274 W)', pts: lin(2050, 8.64),
-    note: 'Quite bearable for noise. Room reached 7 Pa with no filter. 8.6 L/s by bag fill.' },
+    note: () => `Quite bearable for noise. Room reached 7 Pa with no filter. ${qT(8.6)} by bag fill.` },
   { id: 'h2', name: 'Hoover, heater on 2 (390 W)', pts: lin(4750, 13.2),
-    note: 'Still loud. Room reached 16 Pa with no filter. 13.2 L/s by bag fill.' },
+    note: () => `Still loud. Room reached 16 Pa with no filter. ${qT(13.2)} by bag fill.` },
   { id: 'h0', name: 'Hoover, no heater', pts: lin(15200, 23.6),
     note: 'Room reached 50 Pa. Sealed-inlet pressure not measured; inferred from the fan laws.' },
   { id: 'pt', name: 'Pedestal fan, rewired (switch bypassed)', pts: P3.map(([q, p]) => [q * RW, p * RW * RW]),
-    note: 'The fan used in the room tests, wired past its broken switch. Setting 3 bench curve scaled to 0.83× speed (fan laws) to match the room: 24 Pa at 8 L/s (Vacmaster filter on) and at 16 L/s (no filter).' },
+    note: () => `The fan used in the room tests, wired past its broken switch. Setting 3 bench curve scaled to 0.83× speed (fan laws) to match the room: 24 Pa at ${qT(8)} (Vacmaster filter on) and at ${qT(16)} (no filter).` },
   { id: 'p3', name: 'Pedestal fan, setting 3 (bench curve)', pts: P3,
     note: 'Bench curve from the orifice tests (17 Nov, discharge coefficient 0.8 assumed). No duct losses.' },
   { id: 'p2', name: 'Pedestal fan, setting 2 (bench curve)', pts: [[0, 27], [27, 27], [59.6, 26], [103.8, 25], [137.7, 18]],
@@ -235,7 +251,7 @@ const SOURCES = [
   { id: 'p1', name: 'Pedestal fan, setting 1 (bench curve)', pts: [[0, 18], [88.1, 18], [121.4, 14]],
     note: 'Bench curve from the orifice tests (17 Nov, discharge coefficient 0.8 assumed). No duct losses.' },
   { id: 'lv', name: 'Levoit Core Mini, setting 3', pts: [[0, 111], [11.9, 40], [14.6, 14], [17.3, 0]],
-    note: 'Measured with its own filter in: 111 Pa closed, 40 Pa at 11.9 L/s, 14 Pa at 14.6, 17.3 L/s open. Needs its intake ducted from outside.' },
+    note: () => `Measured with its own filter in: 111 Pa closed, 40 Pa at ${qT(11.9)}, 14 Pa at ${IMP() ? cfm(14.6) : 14.6}, ${qT(17.3)} open. Needs its intake ducted from outside.` },
 ];
 
 function fanP(pts, Q) {
@@ -343,26 +359,59 @@ const daysStr = d => d < 1 ? '< 1 day' : d < 1.5 ? '1 day' : d < 60 ? `${Math.ro
 
 // ---------------------------------------------------------------- state & inputs
 const $ = id => document.getElementById(id);
-const S = { src: 'h1', media: 'electret', roomDp: 5, logs: 3, own: 0, mp: 16, mq: 13.2, n: 0.51, vmax: 20 };
+const S = { src: 'h1', media: 'electret', roomDp: 5, logs: 3, own: 0, mp: 16, mq: 13.2, n: 0.51, vmax: 20, units: 'metric' };
+try { const u = localStorage.getItem('units'); if (u === 'metric' || u === 'imperial') S.units = u; } catch (e) {}
 
-function bind(rid, nid, key) {
+// conv = [SI → shown, shown → SI] for inputs whose unit follows the toggle; S always holds SI.
+const shows = [];
+function bind(rid, nid, key, conv) {
   const r = rid && $(rid), nn = $(nid);
-  nn.value = S[key]; if (r) r.value = S[key];
+  const show = () => { nn.value = conv ? +conv[0](S[key]).toFixed(1) : S[key]; if (r) r.value = S[key]; };
+  show(); shows.push(show);
   if (r) r.addEventListener('input', () => { nn.value = r.value; S[key] = +r.value; render(); });
-  nn.addEventListener('input', () => { const v = parseFloat(nn.value); if (v >= 0 && isFinite(v)) { S[key] = v; if (r) r.value = v; render(); } });
+  nn.addEventListener('input', () => { const v = parseFloat(nn.value); if (v >= 0 && isFinite(v)) { S[key] = conv ? conv[1](v) : v; if (r) r.value = v; render(); } });
 }
-function seg(attr, key, parse = x => x) {
+function seg(attr, key, parse = x => x, after) {
   const bs = document.querySelectorAll(`[data-${attr}]`);
   const sync = () => bs.forEach(b => b.setAttribute('aria-pressed', parse(b.dataset[attr]) === S[key]));
-  bs.forEach(b => b.addEventListener('click', () => { S[key] = parse(b.dataset[attr]); sync(); render(); }));
+  bs.forEach(b => b.addEventListener('click', () => { S[key] = parse(b.dataset[attr]); sync(); if (after) after(); render(); }));
   sync();
+}
+function syncUnits() {
+  const imp = IMP();
+  $('mq-u').textContent = imp ? 'CFM' : 'L/s';
+  Object.assign($('mq'), imp ? { min: 0.2, max: 1060 } : { min: 0.1, max: 500 });
+  $('h-side-u').textContent = imp ? 'in' : 'cm';
+  $('t-area-u').textContent = imp ? 'ft²' : 'm²';
+  shows.forEach(f => f());
 }
 
 // ---------------------------------------------------------------- formatting
 const fcm = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
 const f1 = x => x >= 100 ? Math.round(x).toLocaleString('en-GB') : x >= 10 ? x.toFixed(1) : x.toFixed(2);
 const pa = x => `${x >= 10 ? Math.round(x) : x.toFixed(1)} Pa`;
-const ls = q => `${q.toFixed(1)} L/s`;
+// Units: the model is SI (cm, L/s, cm/s, g/m²); these format for display. Pressure stays in Pa in both modes.
+const IMP = () => S.units === 'imperial';
+const LS_PER_CFM = 28.3168 / 60, CM2_PER_FT2 = 929.0304, GSM_PER_OZYD2 = 33.906, CMS_PER_FPM = 0.508;
+const sig = x => x >= 100 ? String(Math.round(x)) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
+const inch = cm => {   // nearest 1/8 in, e.g. "12 3/8"
+  const e = Math.round(cm / 2.54 * 8), w = Math.floor(e / 8), f = e % 8, d = f % 2 ? 1 : f % 4 ? 2 : 4;
+  return f ? `${w ? w + ' ' : ''}${f / d}/${8 / d}` : String(w);
+};
+const len = cm => IMP() ? `${inch(cm)} in` : `${fcm(cm)} cm`;
+const cfm = q => { const x = q / LS_PER_CFM; return x < 100 ? x.toFixed(1) : String(Math.round(x)); };
+const flow = q => IMP() ? `${cfm(q)} CFM` : `${q.toFixed(1)} L/s`;
+const qT = q => IMP() ? `${cfm(q)} CFM` : `${q} L/s`;   // a flow quoted in the notes, as written in metric
+const fpm = v => (v / CMS_PER_FPM).toFixed(1);
+const speed = v => IMP() ? `${fpm(v)} fpm` : `${v.toFixed(1)} cm/s`;
+const vRange = (a, b) => IMP() ? `${fpm(a)}–${fpm(b)} fpm` : `${a}–${b} cm/s`;
+const gsm = x => IMP() ? `${(x / GSM_PER_OZYD2).toFixed(2)} oz/yd²` : `${x} gsm`;
+const dust = x => IMP() ? `${(x / GSM_PER_OZYD2).toPrecision(2)} oz/yd²` : `${x} g/m²`;
+const dustK = k => IMP() ? `${Math.round(k * CMS_PER_FPM * GSM_PER_OZYD2)} Pa per (fpm · oz/yd²)` : `${k.toFixed(1)} Pa per (cm/s · g/m²)`;
+const mass = g => { if (!IMP()) return `${Math.round(g)} g`; const oz = g / 28.3495; return oz >= 16 ? `${(g / 453.592).toFixed(2)} lb` : `${oz.toFixed(oz < 1 ? 2 : 1)} oz`; };
+const perKg = x => IMP() ? `$${(x / 2.20462).toFixed(2)}/lb` : `$${x}/kg`;
+const perM2 = x => IMP() ? `$${(x / 10.7639).toPrecision(2)}/ft²` : `$${x.toFixed(1)}/m²`;
+const area = cm2 => IMP() ? `${sig(cm2 / CM2_PER_FT2)} ft²` : `${(cm2 / 1e4).toFixed(2)} m²`;
 const pfStr = L => L >= 5 ? '> 100,000' : Number(Math.pow(10, L).toPrecision(2)).toLocaleString('en-GB');
 const usd = x => '≈ $' + (x < 1 ? x.toPrecision(2) : x.toFixed(2));
 const el = (tag, attrs = {}, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
@@ -370,23 +419,25 @@ const el = (tag, attrs = {}, text) => { const e = document.createElementNS('http
 // ---------------------------------------------------------------- render
 function render() {
   const src = SOURCES.find(s => s.id === S.src);
-  $('src-note').textContent = src.note;
+  $('src-note').textContent = typeof src.note === 'function' ? src.note() : src.note;
   M = MEDIA[S.media];
   $('t-cap').textContent = M.name;
+  drawNote();
   const n = Math.min(1, Math.max(0.5, S.n));
   const C = S.mq / Math.pow(S.mp, n);
-  $('o-ela').textContent = `${Math.round(leakQ(4, C, n) / 1000 / Math.sqrt(2 * 4 / 1.2) * 1e4)} cm²`;
+  const ela = leakQ(4, C, n) / 1000 / Math.sqrt(2 * 4 / 1.2) * 1e4;   // cm²
+  $('o-ela').textContent = IMP() ? `${(ela / 6.4516).toFixed(1)} in²` : `${Math.round(ela)} cm²`;
   const L = Math.max(0, S.logs - S.own);
 
   const bare = operate(src, C, n, 0, 1);
-  $('o-max').textContent = bare ? `${pa(bare.room)} at ${ls(bare.Q)}` : '—';
+  $('o-max').textContent = bare ? `${pa(bare.room)} at ${flow(bare.Q)}` : '—';
 
   const flags = $('flags'); flags.replaceChildren();
   const flag = txt => { const d = document.createElement('span'); d.className = 'flag'; d.textContent = txt; flags.append(d); };
   const spec = $('spec'); spec.replaceChildren();
   const blank = txt => {
     for (const id of ['h-side', 'h-n', 't-area']) $(id).textContent = '—';
-    $('t-cost').textContent = ''; $('t-basis').textContent = '';
+    $('t-cost').textContent = ''; $('t-basis').textContent = ''; $('t-bags').textContent = '';
     $('stack').replaceChildren();
     flag(txt);
     drawPQ(src, C, n, null);
@@ -395,23 +446,29 @@ function render() {
   if (L <= 0) { blank('The mover\'s own filter already meets the target'); return; }
   if (!bare || bare.room < S.roomDp) { blank(`This mover can't hold ${pa(S.roomDp)} even with no filter: ${bare ? pa(bare.room) : '0 Pa'} at most`); return; }
 
-  const b = design(src, C, n, S.roomDp, L, S.vmax);
-  if (!b) { blank('No square up to 3 m meets this. Lower the room pressure or allow a faster face speed.'); return; }
+  let b = design(src, C, n, S.roomDp, L, S.vmax);
+  if (b && IMP()) {   // same design, square rounded up to the next 1/4 in and re-evaluated (a bigger square only helps)
+    const r = check(src, C, n, L, S.vmax, b.layers, Math.ceil(b.side / 0.635 - 1e-9) * 0.635);
+    if (r) { r.life = life(r, src, C, n); r.total = r.used * Math.max(1, HORIZON / Math.max(r.life, 1e-6)); b = r; }
+  }
+  if (!b) { blank(`No square up to ${IMP() ? (SIDE_MAX / 30.48).toFixed(1) + ' ft' : SIDE_MAX / 100 + ' m'} meets this. Lower the room pressure or allow a faster face speed.`); return; }
 
-  $('h-side').textContent = fcm(b.side);
+  const elec = S.media === 'electret', nf = Math.ceil(HORIZON / b.life);
+  $('h-side').textContent = IMP() ? inch(b.side) : fcm(b.side);
   $('h-n').textContent = String(b.layers);
-  $('t-area').textContent = (b.used / 1e4).toFixed(2);
+  $('t-area').textContent = IMP() ? sig(b.used / CM2_PER_FT2) : (b.used / 1e4).toFixed(2);
   $('t-cost').textContent = M.cost(b.used / 1e4);
-  $('t-basis').textContent = M.basis;
+  $('t-basis').textContent = M.basis();
+  $('t-bags').textContent = elec ? bags(b.side, b.layers) : '';
 
   const rows = [
-    ['Airflow', `${ls(b.Q)} · ${Math.round(b.Q * 3.6)} m³/h`],
+    ['Airflow', IMP() ? flow(b.Q) : `${flow(b.Q)} · ${Math.round(b.Q * 3.6)} m³/h`],
     ['Room pressure', pa(b.room)],
     ['Filter Δp', pa(b.filt)],
-    ['Face speed*', `${b.v.toFixed(1)} cm/s`],
+    ['Face speed*', speed(b.v)],
     ['PF at 0.3 µm', S.own > 0 ? `${pfStr(b.logs)} × ${pfStr(S.own)} = ${pfStr(b.logs + S.own)}` : pfStr(b.logs)],
     ['Lasts†', b.life >= HORIZON ? `> ${HORIZON} days` : daysStr(b.life)],
-    [`Over ${HORIZON} days`, b.life >= HORIZON ? 'no changes' : `${(b.total / 1e4).toFixed(2)} m² (${Math.ceil(HORIZON / b.life)} filters)`],
+    [`Over ${HORIZON} days`, b.life >= HORIZON ? 'no changes' : `${area(b.total)} (${nf} filters)${elec ? ', ' + bags(b.side, nf * b.layers) : ''}`],
   ];
   for (const [k, v] of rows) {
     const d = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -420,8 +477,8 @@ function render() {
     else dt.textContent = k;
     dd.textContent = v; d.append(dt, dd); spec.append(d);
   }
-  if (b.v > M.hi || b.v < M.lo) flag(`Face speed ${b.v.toFixed(1)} cm/s is outside ${M.range}`);
-  if (b.Q < CO2_MIN_LS) flag(`Airflow ${ls(b.Q)} is below the ${ls(CO2_MIN_LS)} that keeps CO₂ under 1% with 4 people in the room`);
+  if (b.v > M.hi || b.v < M.lo) flag(`Face speed ${speed(b.v)} is outside ${M.range()}`);
+  if (b.Q < CO2_MIN_LS) flag(`Airflow ${flow(b.Q)} is below the ${flow(CO2_MIN_LS)} that keeps CO₂ under 1% with 4 people in the room`);
   if (b.room > S.roomDp * 1.5 + 1) flag(`The mover pushes the room to ${pa(b.room)}, above the ${pa(S.roomDp)} asked for`);
 
   drawStack(b);
@@ -437,19 +494,21 @@ function drawPQ(src, C, n, b) {
   const yNeed = Math.max(S.roomDp * 2.5, bare ? bare.room * 1.4 : 0, b ? (b.room + b.filt) * 1.6 : 0, 10);
   const yTop = Math.min(Math.max(fanP(src.pts, 0) * 1.08, 10), yNeed);
   const niceStep = r => { const raw = r / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; };
-  const xs = niceStep(qTop), ys = niceStep(yTop);
-  const xMax = Math.ceil(qTop / xs) * xs, yMax = Math.ceil(yTop / ys) * ys;
+  const qu = IMP() ? 1 / LS_PER_CFM : 1;   // shown flow per L/s; the axis ticks are in shown units
+  const xs = niceStep(qTop * qu), ys = niceStep(yTop);
+  const xMaxU = Math.ceil(qTop * qu / xs) * xs, xMax = xMaxU / qu, yMax = Math.ceil(yTop / ys) * ys;
   const X = q => ml + (W - ml - mr) * q / xMax, Y = p => mt + (H - mt - mb) * (1 - Math.min(p, yMax * 1.02) / yMax);
   const g = el('g');
-  for (let q = 0; q <= xMax + 1e-9; q += xs) {
+  for (let qd = 0; qd <= xMaxU + 1e-9; qd += xs) {
+    const q = qd / qu;
     g.append(el('line', { x1: X(q), x2: X(q), y1: Y(0), y2: Y(yMax), stroke: 'var(--line)' }));
-    g.append(el('text', { x: X(q), y: Y(0) + 15, 'text-anchor': 'middle' }, String(+q.toFixed(3))));
+    g.append(el('text', { x: X(q), y: Y(0) + 15, 'text-anchor': 'middle' }, String(+qd.toFixed(3))));
   }
   for (let p = 0; p <= yMax + 1e-9; p += ys) {
     g.append(el('line', { x1: X(0), x2: X(xMax), y1: Y(p), y2: Y(p), stroke: 'var(--line)' }));
     g.append(el('text', { x: X(0) - 6, y: Y(p) + 4, 'text-anchor': 'end' }, String(+p.toFixed(3))));
   }
-  g.append(el('text', { x: X(xMax), y: H - 4, 'text-anchor': 'end' }, 'flow, L/s'));
+  g.append(el('text', { x: X(xMax), y: H - 4, 'text-anchor': 'end' }, IMP() ? 'flow, CFM' : 'flow, L/s'));
   g.append(el('text', { x: 4, y: mt - 2 }, 'Pa'));
   const path = fn => { let d = ''; for (let i = 0; i <= 120; i++) { const q = xMax * i / 120, p = fn(q); if (!isFinite(p)) continue; d += (d ? 'L' : 'M') + X(q).toFixed(1) + ',' + Y(p).toFixed(1); } return d; };
   const clip = el('clipPath', { id: 'plot' }); clip.append(el('rect', { x: X(0), y: Y(yMax), width: X(xMax) - X(0), height: Y(0) - Y(yMax) }));
@@ -494,20 +553,35 @@ function drawStack(b) {
   const [ax, ay] = P(s / 2, s / 2, zTop);
   g.append(el('line', { x1: ax, x2: ax, y1: ay - 64, y2: ay - 4, stroke: 'var(--accent)', 'stroke-width': 2 }));
   g.append(el('path', { d: `M${ax - 5},${ay - 12} L${ax},${ay - 4} L${ax + 5},${ay - 12}`, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-  g.append(el('text', { x: ax + 10, y: ay - 54 }, ls(b.Q)));
+  g.append(el('text', { x: ax + 10, y: ay - 54 }, flow(b.Q)));
   const [lx, ly] = P(0, s, 0), [fx, fy] = P(s, s, 0), nx = -0.5, ny = Cc, off = 12;
   const d1 = [lx + nx * off, ly + ny * off], d2 = [fx + nx * off, fy + ny * off];
   g.append(el('line', { x1: d1[0], y1: d1[1], x2: d2[0], y2: d2[1], stroke: 'var(--ink-3)' }));
   for (const [x, y] of [d1, d2]) g.append(el('line', { x1: x - nx * 5, y1: y - ny * 5, x2: x + nx * 5, y2: y + ny * 5, stroke: 'var(--ink-3)' }));
   const mx = (d1[0] + d2[0]) / 2 + nx * 14, my = (d1[1] + d2[1]) / 2 + ny * 14;
-  g.append(el('text', { class: 'big', x: mx, y: my, 'text-anchor': 'middle', 'dominant-baseline': 'middle', transform: `rotate(30 ${mx.toFixed(1)} ${my.toFixed(1)})` }, `${fcm(b.side)} cm`));
+  g.append(el('text', { class: 'big', x: mx, y: my, 'text-anchor': 'middle', 'dominant-baseline': 'middle', transform: `rotate(30 ${mx.toFixed(1)} ${my.toFixed(1)})` }, len(b.side)));
   const [rx, ry] = P(s, 0, 0), bx = rx + 12, yTop = ry - zTop;
   if (b.layers > 1) g.append(el('path', { d: `M${bx - 4},${ry} L${bx},${ry} L${bx},${yTop} L${bx - 4},${yTop}`, fill: 'none', stroke: 'var(--ink-3)' }));
   g.append(el('text', { class: 'big', x: bx + 8, y: (ry + yTop) / 2, 'dominant-baseline': 'middle' }, `× ${b.layers}`));
   svg.append(g);
   const bb = g.getBBox();
   svg.setAttribute('viewBox', `0 ${(bb.y - 8).toFixed(1)} ${W} ${(bb.height + 16).toFixed(1)}`);
-  svg.setAttribute('aria-label', `${b.layers} layers of ${fcm(b.side)} cm square electret`);
+  svg.setAttribute('aria-label', `${b.layers} layers of ${len(b.side)} square electret`);
+}
+
+// ---------------------------------------------------------------- notes
+function drawNote() {
+  const imp = IMP();
+  $('note').innerHTML = `<b>Room leaks</b> default to the measured test bedroom (${imp ? Math.round(22.6 * 35.3147) + ' ft³' : '22.6 m³'}): the Hoover on heater 2 and 1 gave 16 Pa at ${qT(13.2)} and 7 Pa at ${qT(8.6)}, so n = 0.51, which the page keeps for any room.<br>` +
+    `<b>Electret</b>: Arome Livii vacuum-bag electret, measured at ${vRange(4.9, 5.9)}, ${gsm(GSM)} at ${perKg(USD_PER_KG)}.<br>` +
+    `<b>Paper vacuum bags</b>: one Arome Livii bag opened out is one ${imp ? `${inch(BAG_W)} × ${inch(BAG_H)} in ply (${(BAG_W * BAG_H / CM2_PER_FT2).toFixed(2)} ft²)` : '62 × 69 cm ply (0.428 m²)'}. The count is whole squares per ply, or by area when a square is bigger than a bag.<br>` +
+    `<b>PTFE</b>: H13 ePTFE membrane, 120 Pa and 99.95% at ${speed(5.3)} (data sheet; QF ≈ 63 kPa⁻¹), ${perM2(1.0)}. At other speeds log PF ∝ v^−2/3 is assumed.<br>` +
+    `Both lose ${len(MARGIN)} to the seal on each edge of each layer.<br>` +
+    '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
+    `* Face speed is capped at ${imp ? speed(S.vmax) : S.vmax + ' cm/s'}.<br>` +
+    `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
+    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls below the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${dust(M_STAR)} (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. Caught dust also adds ${dustK(KE)} (Ando et al. 1993), and life ends early if room pressure falls 25%. ` +
+    `PTFE: until room pressure is 25% below its start, as a dust cake adds ${dustK(CAKE_K)} (Zhang et al. 2018, KCl).`;
 }
 
 // ---------------------------------------------------------------- init
@@ -516,22 +590,15 @@ function drawStack(b) {
   for (const s of SOURCES) sel.append(Object.assign(document.createElement('option'), { value: s.id, textContent: s.name }));
   sel.value = S.src;
   sel.addEventListener('change', () => { S.src = sel.value; render(); });
-  $('note').innerHTML = '<b>Room leaks</b> default to the measured test bedroom (22.6 m³): the Hoover on heater 2 and 1 gave 16 Pa at 13.2 L/s and 7 Pa at 8.6 L/s, so n = 0.51, which the page keeps for any room.<br>' +
-    '<b>Electret</b>: Arome Livii vacuum-bag electret, measured at 4.9–5.9 cm/s, 20 gsm at $2/kg.<br>' +
-    '<b>PTFE</b>: H13 ePTFE membrane, 120 Pa and 99.95% at 5.3 cm/s (data sheet; QF ≈ 63 kPa⁻¹), $1.0/m². At other speeds log PF ∝ v^−2/3 is assumed.<br>' +
-    'Both lose 2 cm to the seal on each edge of each layer.<br>' +
-    '<b>PF</b> is the filter alone (plus the mover\'s own filter if entered). It ignores leaks around the filter and air leaking in.<br>' +
-    `* Face speed is capped at ${S.vmax} cm/s.<br>` +
-    `Sized for the least material over ${HORIZON} days, counting replacements.<br>` +
-    `† Lasts, in air with ${CAIR} µg/m³ PM2.5. Electret: until PF falls below the target. Each layer keeps ${Math.round(MECH_FRAC * 100)}% of its logs as mechanical filtration and loses the rest once it has caught ${M_STAR} g/m² (order of magnitude from ambient-air tests, 10–17 Nov); front layers catch the dust first. Caught dust also adds 4.2 Pa per (cm/s · g/m²) (Ando et al. 1993), and life ends early if room pressure falls 25%. ` +
-    'PTFE: until room pressure is 25% below its start, as a dust cake adds 15.6 Pa per (cm/s · g/m²) (Zhang et al. 2018, KCl).';
 }
 bind('rpr', 'rp', 'roomDp');
 bind(null, 'own', 'own');
 bind(null, 'mp', 'mp');
-bind(null, 'mq', 'mq');
+bind(null, 'mq', 'mq', [q => IMP() ? q / LS_PER_CFM : q, x => IMP() ? x * LS_PER_CFM : x]);
 seg('logs', 'logs', Number);
 seg('media', 'media');
+seg('units', 'units', x => x, () => { try { localStorage.setItem('units', S.units); } catch (e) {} syncUnits(); });
+syncUnits();
 $('controls').addEventListener('submit', e => e.preventDefault());
 render();
 </script>
